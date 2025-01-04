@@ -126,7 +126,7 @@ export default function InvoiceManagement() {
           address: toAddress || ''
         },
         medicines: medicines.map(med => ({
-          name : med.name || '',
+          name: med.name || '',
           quantity: Number(med.quantity) || 0,
           sellingPrice: Number(med.sellingPrice) || 0,
           medicineId: med.medicineId || null
@@ -135,7 +135,11 @@ export default function InvoiceManagement() {
         paymentStatus: paymentStatus || 'Pending',
         paymentMode: paymentMode || 'Cash',
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        sellHistory: medicines.map(med => ({
+          entry: `${med.quantity} ${med.name} sold to ${toName}`,
+          timestamp: new Date().toISOString()
+        }))
       };
 
       await updateInventory(medicines);
@@ -243,7 +247,7 @@ export default function InvoiceManagement() {
     const startY = 110;
     const lineHeight = 10;
     const tableStartY = startY + lineHeight;
-    
+ 
     doc.text("Medicines:", 20, startY);
     doc.text("Name", 20, tableStartY);
     doc.text("Quantity", 100, tableStartY);
@@ -506,6 +510,7 @@ export default function InvoiceManagement() {
                                   </select>
                                 </td>
                                 <td>{invoice.paymentMode}</td>
+                                <td>{invoice.created}</td>
                                 <td>{invoice.createdAt.toLocaleDateString()}</td>
                                 <td>
                                   <button

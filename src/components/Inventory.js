@@ -6,18 +6,35 @@ import { Link } from "react-router-dom";
 import { db } from "../firebase";
 import { collection, getDocs, doc, deleteDoc, updateDoc, getDoc } from "firebase/firestore";
 import { Modal } from 'react-bootstrap';
+import { Eye } from 'lucide-react'; // Import the Eye icon
 
 export default function Inventory() {
   const [medicines, setMedicines] = useState([]);
-  const [history, setHistory] = useState([]); // State to store history for the selected medicine
-  const [showHistoryModal, setShowHistoryModal] = useState(false); // State to control modal visibility
-  const [selectedMedicine, setSelectedMedicine] = useState(null); // State to store the selected medicine for history
-  const [stockInputs, setStockInputs] = useState({}); // State to manage input visibility and values
+  const [filteredMedicines, setFilteredMedicines] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [history, setHistory] = useState([]);
+  const [sellHistory, setSellHistory] = useState([]); // State to store sell history for the selected medicine
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showSellHistoryModal, setShowSellHistoryModal] = useState(false); // State to control sell history modal visibility
+  const [selectedMedicine, setSelectedMedicine] = useState(null);
+  const [stockInputs, setStockInputs] = useState({});
+  const [filterCategory, setFilterCategory] = useState("");
+  const [categories, setCategories] = useState([]);
   const medicinesCollectionRef = collection(db, "medicine_inventory");
+  const invoicesCollectionRef = collection(db, "invoices"); // Reference to invoices collection
 
   const getTypes = async () => {
     const data = await getDocs(medicinesCollectionRef);
-    setMedicines(data.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+    const medicinesList = data.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+    setMedicines(medicinesList);
+    setFilteredMedicines(medicinesList);
+  };
+
+  const getCategories = async () => {
+    const categoriesCollectionRef = collection(db, "medicine_categories");
+    const categoryData = await getDocs(categoriesCollectionRef);
+    const categoryList = categoryData.docs.map((doc) => doc.data().name);
+    setCategories(categoryList);
   };
 
   const handleDeleteButton = async (id) => {
@@ -25,9 +42,6 @@ export default function Inventory() {
     const medicineData = await getDoc(medDoc);
     
     if (medicineData.exists()) {
-      const currentStock = medicineData.data().stock;
-
-      // Log the deletion in history
       const newHistoryEntry = {
         action: `Deleted ${medicineData.data().name} from inventory`,
         date: new Date().toLocaleString(),
@@ -52,11 +66,8 @@ export default function Inventory() {
     const medicineData = await getDoc(medDoc);
     if (medicineData.exists()) {
       const newStock = medicineData.data().stock + parseInt(input);
-
-      // Update the stock in the database
       await updateDoc(medDoc, { stock: newStock });
 
-      // Log the addition in history
       const newHistoryEntry = {
         action: `Added ${input} more items of ${medicineData.data().name} to stock`,
         date: new Date().toLocaleString(),
@@ -65,20 +76,67 @@ export default function Inventory() {
         history: [...(medicineData.data().history || []), newHistoryEntry]
       });
 
-      // Reset the input for this medicine
       setStockInputs((prev) => ({ ...prev, [medicineId]: "" }));
-      getTypes(); // Refresh the data
+      getTypes();
     }
   };
 
   const handleShowHistory = async (medicine) => {
     setSelectedMedicine(medicine);
-    setHistory(medicine.history || []); // Load the history from the selected medicine
+    setHistory(medicine.history || []);
     setShowHistoryModal(true);
+  };
+
+  const handleShowSellHistory = async (medicine) => {
+    setSelectedMedicine(medicine);
+    const invoiceData = await getDocs(invoicesCollectionRef);
+    const sellHistoryData = [];
+
+    invoiceData.forEach((doc) => {
+      const invoice = doc.data();
+      invoice.medicines.forEach((med) => {
+        if (med.medicineId === medicine.id) {
+          sellHistoryData.push({
+            customerName: invoice.to.name,
+            quantitySold: med.quantity,
+            date: new Date(invoice.createdAt.seconds * 1000).toLocaleString() // Convert Firestore timestamp to a readable date
+          });
+        }
+      });
+    });
+
+    setSellHistory(sellHistoryData);
+    setShowSellHistoryModal(true);
+  };
+
+  const handleSearch = (e) => {
+    const query = e.target.value.toLowerCase();
+    setSearchQuery(query);
+    const filtered = medicines.filter(medicine =>
+      medicine.name.toLowerCase().includes(query)
+    );
+    setFilteredMedicines(filtered);
+  };
+
+  const handleFilterCategory = (e) => {
+    const category = e.target.value;
+    setFilterCategory(category);
+    filterMedicines(category);
+  };
+
+  const filterMedicines = (category) => {
+    let filtered = medicines;
+
+    if (category) {
+      filtered = filtered.filter(medicine => medicine.category === category);
+    }
+
+    setFilteredMedicines(filtered);
   };
 
   useEffect(() => {
     getTypes();
+    getCategories();
   }, []);
 
   return (
@@ -98,33 +156,42 @@ export default function Inventory() {
                       <Link to="/addmedicine" className="btn btn-primary btn-sm float-right">
                         Add new Medicine
                       </Link>
-                      <button
-                        className="btn btn-info btn-sm float-right mr-2"
-                        onClick={() => setShowHistoryModal(true)}
-                      >
-                        History
-                      </button>
                     </h4>
+                    <input
+                      type="text"
+                      placeholder="Search Medicine"
+                      className="form-control"
+                      value={searchQuery}
+                      onChange={handleSearch}
+                      style={{ width: "300px", marginTop: "10px" }}
+                    />
+                    <select onChange={handleFilterCategory} className="form-control" style={{ width: "150px", marginTop: "10px", marginLeft: "10px" }}>
+                      <option value="">Filter by Category</option>
+                      {categories.map((category, index) => (
+                        <option key={index} value={category}>{category}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="card-body">
-                    <div className="table-responsive">
-                      <table className="table table-striped">
+                    <div className="table-responsive text-center mx-auto">
+                      <table className="table table-striped" style={{ width: "100%" }}>
                         <thead>
                           <tr>
                             <th>#</th>
                             <th>
-                              Medicine Name<sup>Power</sup>
+                              Name<sup>Power</sup>
                             </th>
-                            <th>Medicine Category</th>
-                            <th>Medicine Type</th>
-                            <th>Medicine Price</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Price</th>
                             <th>Stock</th>
                             <th>Action</th>
-                            <th>History</th> {/* New History Column */}
+                            <th>Buy History</th>
+                            <th>Sell History</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {medicines.map((medicine, index) => (
+                          {filteredMedicines.map((medicine, index) => (
                             <tr key={medicine.id}>
                               <td>{index + 1}</td>
                               <td>
@@ -176,7 +243,7 @@ export default function Inventory() {
                                     <button
                                       type="button"
                                       onClick={() => handleAddStock(medicine.id)}
-                                      className="btn btn-link btn-primary"
+                                      class ="btn btn-link btn-primary"
                                     >
                                       <i className="la la-plus"></i>
                                     </button>
@@ -190,6 +257,15 @@ export default function Inventory() {
                                   onClick={() => handleShowHistory(medicine)}
                                 >
                                   <i className="la la-eye"></i>
+                                </button>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-link btn-danger"
+                                  onClick={() => handleShowSellHistory(medicine)}
+                                >
+                                  <i className="la la-eye" style={{ color: 'red' }}></i>
                                 </button>
                               </td>
                             </tr>
@@ -222,6 +298,27 @@ export default function Inventory() {
         </Modal.Body>
         <Modal.Footer>
           <button className="btn btn-secondary" onClick={() => setShowHistoryModal(false)}>
+            Close
+          </button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Sell History Modal for Selected Medicine */}
+      <Modal show={showSellHistoryModal} onHide={() => setShowSellHistoryModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Sell History for {selectedMedicine?.name}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ul className="list-group">
+            {sellHistory.map((entry, index) => (
+              <li key={index} className="list-group-item">
+                {entry.quantitySold} of {selectedMedicine?.name} sold to {entry.customerName} - <small>{entry.date}</small>
+              </li>
+            ))}
+          </ul>
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary" onClick={() => setShowSellHistoryModal(false)}>
             Close
           </button>
         </Modal.Footer>
