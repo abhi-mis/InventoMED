@@ -4,7 +4,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 export default function InvoiceTable({ invoices, isLoading, handleEdit, handleDelete }) {
   return (
     <div className="table-full-width px-5 py-4 table-striped">
-      <table className="table">
+      <table className="table table-responsive-md">
         <thead>
           <tr>
             <th>#</th>

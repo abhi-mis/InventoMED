@@ -1,128 +1,98 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '../firebase';
 import AdminHeader from "./layouts/AdminHeader";
 import AdminSideBar from "./layouts/AdminSideBar";
 import AdminFooter from "./layouts/AdminFooter";
-import { db } from "../firebase";
-import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc } from "firebase/firestore";
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { 
+  Package2, 
+  Pill, 
+  AlertCircle, 
+  DollarSign,
+  ShoppingCart,
+  FileText,
+  Boxes,
+  TrendingUp
+} from 'lucide-react';
 
-export default function InvoiceManagement() {
-  const [fromName, setFromName] = useState("");
-  const [fromPhone, setFromPhone] = useState("");
-  const [fromAddress, setFromAddress] = useState("");
-  const [toName, setToName] = useState("");
-  const [toPhone, setToPhone] = useState("");
-  const [toAddress, setToAddress] = useState("");
-  const [medicines, setMedicines] = useState([{ name: "", quantity: 1, price: 0 }]);
-  const [paymentStatus, setPaymentStatus] = useState("Pending");
-  const [paymentMode, setPaymentMode] = useState("Cash");
+export default function Dashboard() {
+  const [medicines, setMedicines] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingInvoice, setEditingInvoice] = useState(null);
-
-  const invoicesCollectionRef = collection(db, "invoices");
-
-  const handleAddMedicine = () => {
-    setMedicines([...medicines, { name: "", quantity: 1, price: 0 }]);
-  };
-
-  const handleMedicineChange = (index, field, value) => {
-    const newMedicines = [...medicines];
-    newMedicines[index][field] = value;
-    setMedicines(newMedicines);
-  };
-
-  const handleRemoveMedicine = (index) => {
-    const newMedicines = medicines.filter((_, i) => i !== index);
-    setMedicines(newMedicines);
-  };
-
-  const handleEdit = (invoice) => {
-    setEditingInvoice(invoice.id);
-    setFromName(invoice.from.name);
-    setFromPhone(invoice.from.phone);
-    setFromAddress(invoice.from.address || "");
-    setToName(invoice.to.name);
-    setToPhone(invoice.to.phone);
-    setToAddress(invoice.to.address || "");
-    setMedicines(invoice.medicines);
-    setPaymentStatus(invoice.paymentStatus);
-    setPaymentMode(invoice.paymentMode);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      const invoiceDoc = doc(db, "invoices", id);
-      await deleteDoc(invoiceDoc);
-      toast.success("Invoice deleted successfully!");
-      fetchInvoices();
-    } catch (error) {
-      toast.error("Error deleting invoice!");
-      console.error("Error deleting invoice:", error);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const totalAmount = medicines.reduce((total, med) => total + (med.quantity * med.price), 0);
-    const invoiceData = {
-      from: { name: fromName, phone: fromPhone, address: fromAddress },
-      to: { name: toName, phone: toPhone, address: toAddress },
-      medicines,
-      total: totalAmount,
-      paymentStatus,
-      paymentMode,
-      date: new Date().toISOString(),
-    };
-
-    try {
-      if (editingInvoice) {
-        const invoiceDoc = doc(db, "invoices", editingInvoice);
-        await updateDoc(invoiceDoc, invoiceData);
-        toast.success("Invoice updated successfully!");
-      } else {
-        await addDoc(invoicesCollectionRef, invoiceData);
-        toast.success("Invoice added successfully!");
-      }
-      resetForm();
-      fetchInvoices();
-    } catch (error) {
-      toast.error(editingInvoice ? "Error updating invoice!" : "Error adding invoice!");
-      console.error("Error with invoice:", error);
-    }
-  };
-
-  const resetForm = () => {
-    setFromName("");
-    setFromPhone("");
-    setFromAddress("");
-    setToName("");
-    setToPhone("");
-    setToAddress("");
-    setMedicines([{ name: "", quantity: 1, price: 0 }]);
-    setPaymentStatus("Pending");
-    setPaymentMode("Cash");
-    setShowForm(false);
-    setEditingInvoice(null);
-  };
-
-  const fetchInvoices = async () => {
-    try {
-      const data = await getDocs(invoicesCollectionRef);
-      setInvoices(data.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
-    } catch (error) {
-      toast.error("Error fetching invoices!");
-      console.error("Error fetching invoices:", error);
-    }
-    setIsLoading(false);
-  };
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchInvoices();
+    // Listen to medicines collection
+    const medicinesQuery = query(collection(db, 'medicine_inventory'));
+    const unsubMedicines = onSnapshot(medicinesQuery, (snapshot) => {
+      const medicineData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMedicines(medicineData);
+    });
+
+    // Listen to invoices collection
+    const invoicesQuery = query(collection(db, 'invoices'));
+    const unsubInvoices = onSnapshot(invoicesQuery, (snapshot) => {
+      const invoiceData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setInvoices(invoiceData);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubMedicines();
+      unsubInvoices();
+    };
   }, []);
+
+  // Calculate dashboard metrics
+  const totalStock = medicines.reduce((acc, med) => acc + parseInt(med.stock || 0), 0);
+  const totalUniqueItems = medicines.length;
+  const lowStockItems = medicines.filter(med => parseInt(med.stock) < 10).length;
+  
+  const totalInventoryValue = medicines.reduce((acc, med) => 
+    acc + (parseInt(med.stock || 0) * parseFloat(med.price || 0)), 0
+  );
+
+  const totalSales = invoices.reduce((acc, inv) => acc + (inv.total || 0), 0);
+  const pendingAmount = invoices
+    .filter(inv => inv.paymentStatus === 'Pending')
+    .reduce((acc, inv) => acc + (inv.total || 0), 0);
+  const paidAmount = invoices
+    .filter(inv => inv.paymentStatus === 'Paid')
+    .reduce((acc, inv) => acc + (inv.total || 0), 0);
+
+  const totalInvoices = invoices.length;
+  
+  // Calculate month-over-month growth
+  const currentMonth = new Date().getMonth();
+  const currentMonthSales = invoices
+    .filter(inv => new Date(inv.date).getMonth() === currentMonth)
+    .reduce((acc, inv) => acc + (inv.total || 0), 0);
+  
+  const lastMonthSales = invoices
+    .filter(inv => new Date(inv.date).getMonth() === currentMonth - 1)
+    .reduce((acc, inv) => acc + (inv.total || 0), 0);
+  
+  const monthlyGrowth = lastMonthSales ? 
+    ((currentMonthSales - lastMonthSales) / lastMonthSales * 100).toFixed(1) : 0;
+
+  // Get recent transactions
+  const recentTransactions = invoices
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+
+  // Get low stock medicines
+  const lowStockMedicines = medicines
+    .filter(med => parseInt(med.stock) < 10)
+    .slice(0, 5);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
 
   return (
     <>
@@ -131,246 +101,242 @@ export default function InvoiceManagement() {
       <div className="main-panel">
         <div className="content">
           <div className="container-fluid">
-            <h4 className="page-title">Invoice Management</h4>
+            <h4 className="page-title">Dashboard</h4>
+
+            {/* Main Stats - First Row */}
             <div className="row">
-              <div className="col-md-12">
-                <div className="card card-tasks">
+              <div className="col-md-3">
+                <div className="card card-stats card-primary">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <Package2 size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Total Stock</p>
+                          <h4 className="card-title">{totalStock}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <div className="card card-stats card-info">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <Boxes size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Unique Items</p>
+                          <h4 className="card-title">{totalUniqueItems}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <div className="card card-stats card-success">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <DollarSign size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Inventory Value</p>
+                          <h4 className="card-title">₹{totalInventoryValue.toLocaleString()}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <div className="card card-stats card-danger">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <AlertCircle size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Low Stock Items</p>
+                          <h4 className="card-title">{lowStockItems}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Second Row of Stats */}
+            <div className="row">
+              <div className="col-md-3">
+                <div className="card card-stats card-warning">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <ShoppingCart size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Total Sales</p>
+                          <h4 className="card-title">₹{totalSales.toLocaleString()}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <div className="card card-stats card-success">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <DollarSign size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Paid Amount</p>
+                          <h4 className="card-title">₹{paidAmount.toLocaleString()}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <div className="card card-stats card-danger">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <FileText size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Total Invoices</p>
+                          <h4 className="card-title">{totalInvoices}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <div className="card card-stats card-info">
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-5">
+                        <div className="icon-big text-center">
+                          <TrendingUp size={24} />
+                        </div>
+                      </div>
+                      <div className="col-7 d-flex align-items-center">
+                        <div className="numbers">
+                          <p className="card-category">Monthly Growth</p>
+                          <h4 className="card-title">{monthlyGrowth}%</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Transactions & Low Stock Alerts */}
+            <div className="row">
+              <div className="col-md-6">
+                <div className="card">
                   <div className="card-header">
-                    <h4 className="card-title">
-                      Invoice List{" "}
-                      <button
-                        onClick={() => {
-                          setShowForm(!showForm);
-                          if (!showForm) resetForm();
-                        }}
-                        className="btn btn-primary btn-sm float-right"
-                      >
-                        {showForm ? "Show Invoices" : "Create New Invoice"}
-                      </button>
-                    </h4>
+                    <h4 className="card-title">Recent Transactions</h4>
                   </div>
                   <div className="card-body">
-                    {showForm ? (
-                      <form onSubmit={handleSubmit} className="mb-4 p-4 border rounded">
-                        <div className="row">
-                          <div className="col-md-6">
-                            <h5 className="mb-3">From</h5>
-                            <div className="form-group">
-                              <input
-                                type="text"
-                                className="form-control"
-                                placeholder="Name"
-                                value={fromName}
-                                onChange={(e) => setFromName(e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div className="form-group">
-                              <input
-                                type="text"
-                                className="form-control"
-                                placeholder="Phone Number"
-                                value={fromPhone}
-                                onChange={(e) => setFromPhone(e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div className="form-group">
-                              <textarea
-                                className="form-control"
-                                placeholder="Address"
-                                value={fromAddress}
-                                onChange={(e) => setFromAddress(e.target.value)}
-                                required
-                                rows="3"
-                              />
-                            </div>
-                          </div>
-                          <div className="col-md-6">
-                            <h5 className="mb-3">To</h5>
-                            <div className="form-group">
-                              <input
-                                type="text"
-                                className="form-control"
-                                placeholder="Name"
-                                value={toName}
-                                onChange={(e) => setToName(e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div className="form-group">
-                              <input
-                                type="text"
-                                className="form-control"
-                                placeholder="Phone Number"
-                                value={toPhone}
-                                onChange={(e) => setToPhone(e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div className="form-group">
-                              <textarea
-                                className="form-control"
-                                placeholder="Address"
-                                value={toAddress}
-                                onChange={(e) => setToAddress(e.target.value)}
-                                required
-                                rows="3"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        <h5 className="mt-4 mb-3">Medicines</h5>
-                        {medicines.map((med, index) => (
-                          <div key={index} className="row mb-3">
-                            <div className="col-md-4">
-                              <input
-                                type="text"
-                                className="form-control"
-                                placeholder="Medicine Name"
-                                value={med.name}
-                                onChange={(e) => handleMedicineChange(index, "name", e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div className="col-md-3">
-                              <input
-                                type="number"
-                                className="form-control"
-                                placeholder="Quantity"
-                                value={med.quantity}
-                                onChange={(e) => handleMedicineChange(index, "quantity", e.target.value)}
-                                min="1"
-                                required
-                              />
-                            </div>
-                            <div className="col-md-3">
-                              <input
-                                type="number"
-                                className="form-control"
-                                placeholder="Price"
-                                value={med.price}
-                                onChange={(e) => handleMedicineChange(index, "price", e.target.value)}
-                                min="0"
-                                required
-                              />
-                            </div>
-                            <div className="col-md-2">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMedicine(index)}
-                                className="btn btn-danger btn-sm"
-                                disabled={medicines.length === 1}
-                              >
-                                <i className="la la-times"></i>
-                              </button>
-                            </div>
-                          </div>
+                    <table className="table table-striped">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Customer</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentTransactions.map((invoice) => (
+                          <tr key={invoice.id}>
+                            <td>{new Date(invoice.date).toLocaleDateString()}</td>
+                            <td>{invoice.to?.name}</td>
+                            <td>₹{invoice.total.toLocaleString()}</td>
+                            <td>
+                              <span className={`badge ${
+                                invoice.paymentStatus === 'Paid' 
+                                  ? 'bg-success' 
+                                  : 'bg-warning'
+                              }`}>
+                                {invoice.paymentStatus}
+                              </span>
+                            </td>
+                          </tr>
                         ))}
-                        <button
-                          type="button"
-                          onClick={handleAddMedicine}
-                          className="btn btn-info btn-sm mb-4"
-                        >
-                          Add Medicine
-                        </button>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
 
-                        <div className="row">
-                          <div className="col-md-6">
-                            <div className="form-group">
-                              <label>Payment Status</label>
-                              <select
-                                className="form-control"
-                                value={paymentStatus}
-                                onChange={(e) => setPaymentStatus(e.target.value)}
-                              >
-                                <option value="Pending">Pending</option>
-                                <option value="Paid">Paid</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="col-md-6">
-                            <div className="form-group">
-                              <label>Payment Mode</label>
-                              <select
-                                className="form-control"
-                                value={paymentMode}
-                                onChange={(e) => setPaymentMode(e.target.value)}
-                              >
-                                <option value="Cash">Cash</option>
-                                <option value="Online">Online</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4">
-                          <button type="submit" className="btn btn-success mr-2">
-                            {editingInvoice ? "Update Invoice" : "Create Invoice"}
-                          </button>
-                          <button type="button" onClick={resetForm} className="btn btn-danger">
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="table-full-width px-5 py-4 table-striped">
-                        <table className="table">
-                          <thead>
-                            <tr>
-                              <th>#</th>
-                              <th>From</th>
-                              <th>To</th>
-                              <th>Total Amount</th>
-                              <th>Payment Status</th>
-                              <th>Payment Mode</th>
-                              <th>Date</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {isLoading ? (
-                              <tr>
-                                <td colSpan="8" className="text-center">
-                                  Loading invoices...
-                                </td>
-                              </tr>
-                            ) : (
-                              invoices.map((invoice, index) => (
-                                <tr key={invoice.id}>
-                                  <td>{index + 1}</td>
-                                  <td>{invoice.from.name}</td>
-                                  <td>{invoice.to.name}</td>
-                                  <td>₹{invoice.total}</td>
-                                  <td>
-                                    <span className={`badge ${invoice.paymentStatus === 'Paid' ? 'badge-success' : 'badge-warning'}`}>
-                                      {invoice.paymentStatus}
-                                    </span>
-                                  </td>
-                                  <td>{invoice.paymentMode}</td>
-                                  <td>{new Date(invoice.date).toLocaleDateString()}</td>
-                                  <td>
-                                    <button
-                                      onClick={() => handleEdit(invoice)}
-                                      className="btn btn-link btn-success btn-sm mr-2"
-                                    >
-                                      <i className="la la-edit"></i>
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete(invoice.id)}
-                                      className="btn btn-link btn-danger btn-sm"
-                                    >
-                                      <i className="la la-times"></i>
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+              <div className="col-md-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h4 className="card-title">Low Stock Alerts</h4>
+                  </div>
+                  <div className="card-body">
+                    <table className="table table-striped">
+                      <thead>
+                        <tr>
+                          <th>Medicine</th>
+                          <th>Category</th>
+                          <th>Current Stock</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lowStockMedicines.map((medicine) => (
+                          <tr key={medicine.id}>
+                            <td>{medicine.name}</td>
+                            <td>{medicine.category}</td>
+                            <td>{medicine.stock}</td>
+                            <td>
+                              <span className="badge bg-danger">Low Stock</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -379,7 +345,6 @@ export default function InvoiceManagement() {
         </div>
         <AdminFooter />
       </div>
-      <ToastContainer />
-    </> 
+    </>
   );
 }
