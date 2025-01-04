@@ -1,0 +1,9 @@
+/* styles.css or your existing CSS file */
+.footer {
+    height: 60px !important; /* Set a fixed height */
+    display: flex;
+    align-items: center; /* Center content vertically */
+    justify-content: space-between; /* Space between items */
+    background-color: #f8f9fa; /* Optional: Set a background color */
+    padding: 0 20px; /* Optional: Add some padding */
+  }
