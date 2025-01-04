@@ -33,7 +33,9 @@ export default function AdminSideBar(props) {
         <div className="scrollbar-inner sidebar-wrapper">
           <div className="user">
             <div className="photo">
+            <Link to="/profile">
               <img src={`assets/img/profile4.jpg`} alt="Profile" />
+            </Link>  
             </div>
             <div className="info">
               <a>
@@ -57,6 +59,13 @@ export default function AdminSideBar(props) {
                 <p  className="ml-4">Inventory</p>
               </Link>
             </li>
+
+            <li className="nav-item">
+              <Link to="/invoices"> {/* New Invoice Management Link */}
+                <ClipboardCheck className="w-5 h-5" />
+                <p  className="ml-4">Transactions</p>
+              </Link>
+            </li>
             <li className="nav-item">
               <Link to="/categories">
                 <AlignJustify className="w-5 h-5" />
@@ -69,18 +78,7 @@ export default function AdminSideBar(props) {
                 <p  className="ml-4">Medicine Types</p>
               </Link>
             </li>
-            <li className="nav-item">
-              <Link to="/profile">
-                <User  className="w-5 h-5" />
-                <p  className="ml-4">Profile</p>
-              </Link>
-            </li>
-            <li className="nav-item">
-              <Link to="/invoices"> {/* New Invoice Management Link */}
-                <ClipboardCheck className="w-5 h-5" />
-                <p  className="ml-4">Invoice Management</p>
-              </Link>
-            </li>
+       
             <li className="nav-item">
               <Link onClick={handleLogout}>
                 <LogOut className="w-5 h-5" />

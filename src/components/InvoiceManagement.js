@@ -3,19 +3,20 @@ import AdminHeader from "./layouts/AdminHeader";
 import AdminSideBar from "./layouts/AdminSideBar";
 import AdminFooter from "./layouts/AdminFooter";
 import { db } from "../firebase";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  deleteDoc, 
-  updateDoc, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  deleteDoc,
+  updateDoc,
   getDoc,
   serverTimestamp
 } from "firebase/firestore";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Pencil, Trash2 } from 'lucide-react';
+import jsPDF from 'jspdf';
 
 export default function InvoiceManagement() {
   const [fromName, setFromName] = useState("");
@@ -24,7 +25,7 @@ export default function InvoiceManagement() {
   const [toName, setToName] = useState("");
   const [toPhone, setToPhone] = useState("");
   const [toAddress, setToAddress] = useState("");
-  const [medicines, setMedicines] = useState([{ name: "", quantity: 1, price: 0 }]);
+  const [medicines, setMedicines] = useState([{ name: "", quantity: 1, sellingPrice: 0 }]);
   const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [paymentMode, setPaymentMode] = useState("Cash");
   const [invoices, setInvoices] = useState([]);
@@ -57,26 +58,26 @@ export default function InvoiceManagement() {
   }, []);
 
   const handleAddMedicine = () => {
-    setMedicines([...medicines, { name: "", quantity: 1, price: 0 }]);
+    setMedicines([...medicines, { name: "", quantity: 1, sellingPrice: 0 }]);
   };
 
   const handleMedicineChange = (index, field, value) => {
     const newMedicines = [...medicines];
-    
+
     if (field === "name") {
       const selectedMed = availableMedicines.find(med => med.name === value);
       if (selectedMed) {
         newMedicines[index] = {
           ...newMedicines[index],
           name: selectedMed.name,
-          price: selectedMed.price || 0,
+          sellingPrice: selectedMed.sellingPrice || 0, // Use selling price
           medicineId: selectedMed.id
         };
       }
     } else {
       newMedicines[index][field] = value;
     }
-    
+
     setMedicines(newMedicines);
   };
 
@@ -90,15 +91,15 @@ export default function InvoiceManagement() {
       if (medicine.medicineId) {
         const medicineRef = doc(db, "medicine_inventory", medicine.medicineId);
         const medicineDoc = await getDoc(medicineRef);
-        
+
         if (medicineDoc.exists()) {
           const currentStock = medicineDoc.data().stock;
           const newStock = currentStock - medicine.quantity;
-          
+
           if (newStock < 0) {
             throw new Error(`Insufficient stock for ${medicine.name}`);
           }
-          
+
           await updateDoc(medicineRef, {
             stock: newStock
           });
@@ -109,25 +110,25 @@ export default function InvoiceManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
-      const totalAmount = medicines.reduce((total, med) => total + (med.quantity * med.price), 0);
-      
+      const totalAmount = medicines.reduce((total, med) => total + (med.quantity * med.sellingPrice), 0);
+
       const invoiceData = {
-        from: { 
+        from: {
           name: fromName || '',
           phone: fromPhone || '',
           address: fromAddress || ''
         },
-        to : { 
+        to: {
           name: toName || '',
           phone: toPhone || '',
           address: toAddress || ''
         },
         medicines: medicines.map(med => ({
-          name: med.name || '',
+          name : med.name || '',
           quantity: Number(med.quantity) || 0,
-          price: Number(med.price) || 0,
+          sellingPrice: Number(med.sellingPrice) || 0,
           medicineId: med.medicineId || null
         })),
         total: totalAmount || 0,
@@ -137,7 +138,7 @@ export default function InvoiceManagement() {
         updatedAt: serverTimestamp()
       };
 
-      await updateInventory(medicines); // Deduct stock before adding invoice
+      await updateInventory(medicines);
       await addDoc(invoicesCollectionRef, invoiceData);
       toast.success("Invoice created successfully!");
       resetForm();
@@ -156,7 +157,7 @@ export default function InvoiceManagement() {
     setToName("");
     setToPhone("");
     setToAddress("");
-    setMedicines([{ name: "", quantity: 1, price: 0 }]);
+    setMedicines([{ name: "", quantity: 1, sellingPrice: 0 }]);
     setPaymentStatus("Pending");
     setPaymentMode("Cash");
     setShowForm(false);
@@ -166,8 +167,8 @@ export default function InvoiceManagement() {
   const fetchInvoices = async () => {
     try {
       const data = await getDocs(invoicesCollectionRef);
-      const invoiceList = data.docs.map((doc) => ({ 
-        ...doc.data(), 
+      const invoiceList = data.docs.map((doc) => ({
+        ...doc.data(),
         id: doc.id,
         createdAt: doc.data().createdAt?.toDate() || new Date()
       }));
@@ -187,7 +188,7 @@ export default function InvoiceManagement() {
     setToName(invoice.to.name || '');
     setToPhone(invoice.to.phone || '');
     setToAddress(invoice.to.address || '');
-    setMedicines(invoice.medicines || [{ name: "", quantity: 1, price: 0 }]);
+    setMedicines(invoice.medicines || [{ name: "", quantity: 1, sellingPrice: 0 }]);
     setPaymentStatus(invoice.paymentStatus || 'Pending');
     setPaymentMode(invoice.paymentMode || 'Cash');
     setShowForm(true);
@@ -212,6 +213,71 @@ export default function InvoiceManagement() {
     }
   };
 
+  const generatePDF = async (invoice) => {
+    const doc = new jsPDF();
+    doc.setFontSize(12);
+    
+    // Add title
+    doc.setFontSize(16);
+    doc.text(`Invoice_${invoice.to.name.replace(/\s+/g, ' ')}`, 20, 20);
+    doc.setFontSize(12);
+    
+    // Add From section on the left
+    doc.text("From:", 20, 30);
+    doc.text(`Name: ${invoice.from.name}`, 20, 40);
+    doc.text(`Phone: ${invoice.from.phone}`, 20, 50);
+    doc.text(`Address: ${invoice.from.address}`, 20, 60);
+    
+    // Add To section on the right
+    doc.text("To:", 140, 30);
+    doc.text(`Name: ${invoice.to.name}`, 140, 40);
+    doc.text(`Phone: ${invoice.to.phone}`, 140, 50);
+    doc.text(`Address: ${invoice.to.address}`, 140, 60);
+    
+    // Add Date and Payment details
+    doc.text(`Date: ${invoice.createdAt.toLocaleDateString()}`, 20, 80);
+    doc.text(`Payment Mode: ${invoice.paymentMode}`, 140, 80);
+    doc.text(`Payment Status: ${invoice.paymentStatus}`, 140, 90);
+    
+    // Add Medicines table header
+    const startY = 110;
+    const lineHeight = 10;
+    const tableStartY = startY + lineHeight;
+    
+    doc.text("Medicines:", 20, startY);
+    doc.text("Name", 20, tableStartY);
+    doc.text("Quantity", 100, tableStartY);
+    doc.text("Price", 140, tableStartY);
+    
+    // Draw a line under the header
+    doc.line(20, tableStartY + 2, 190, tableStartY + 2); // Horizontal line
+    
+    let y = tableStartY + lineHeight;
+    let totalAmount = 0;
+  
+    invoice.medicines.forEach(med => {
+      doc.text(med.name, 20, y);
+      doc.text(med.quantity.toString(), 100, y);
+      const price = med.sellingPrice;
+      doc.text(`INR ${price} /Item`, 140, y);
+      totalAmount += med.quantity * price; // Calculate total amount
+      y += lineHeight;
+    });
+  
+    // Draw a line above the total
+    doc.line(20, y, 190, y); // Horizontal line
+    y += 5; // Space before total
+    
+    // Add total amount in bold
+    doc.setFontSize(14);
+    doc.setFont("bold");
+    doc.text(`Total Amount: INR ${totalAmount}`, 20, y);
+    
+    // Save the PDF with the name of the recipient
+    const fileName = `Invoice_${invoice.to.name.replace(/\s+/g, '-')}.pdf`; // Replace spaces with underscores
+    doc.save(fileName);
+  };
+
   return (
     <>
       <AdminHeader />
@@ -231,7 +297,7 @@ export default function InvoiceManagement() {
                   </div>
                   <div className="card-body">
                     {showForm ? (
-                      <form onSubmit={handleSubmit} className="mb-4 p-4 border rounded">
+                      <form onSubmit={handleSubmit} className="mb-4 p-4 border rounded ">
                         <div className="row">
                           <div className="col-md-6">
                             <h5 className="mb-3">From</h5>
@@ -326,9 +392,9 @@ export default function InvoiceManagement() {
                               <input
                                 type="number"
                                 className="form-control"
-                                placeholder="Price"
-                                value={med.price}
-                                readOnly
+                                placeholder="Selling Price"
+                                value={med.sellingPrice}
+                                onChange={(e) => handleMedicineChange(index, "sellingPrice", e.target.value)}
                               />
                             </div>
                             <div className="col-md-2">
@@ -374,7 +440,7 @@ export default function InvoiceManagement() {
                                 onChange={(e) => setPaymentMode(e.target.value)}
                               >
                                 <option value="Cash">Cash</option>
-                                <option value="Online">Online</option>
+                                <option value="Online">Online </option>
                               </select>
                             </div>
                           </div>
@@ -406,8 +472,7 @@ export default function InvoiceManagement() {
                         <tbody>
                           {isLoading ? (
                             <tr>
-
-                            <td colSpan="8" className="text-center">
+                              <td colSpan="8" className="text-center">
                                 Loading invoices...
                               </td>
                             </tr>
@@ -425,9 +490,20 @@ export default function InvoiceManagement() {
                                 <td>{invoice.to.name}</td>
                                 <td>₹{invoice.total}</td>
                                 <td>
-                                  <span className={`badge ${invoice.paymentStatus === 'Paid' ? 'badge-success' : 'badge-warning'}`}>
-                                    {invoice.paymentStatus}
-                                  </span>
+                                  <select
+                                    className={`form-control ${invoice.paymentStatus === 'Paid' ? 'bg-success' : 'bg-warning'}`}
+                                    value={invoice.paymentStatus}
+                                    onChange={async (e) => {
+                                      const newStatus = e.target.value;
+                                      const invoiceDoc = doc(db, "invoices", invoice.id);
+                                      await updateDoc(invoiceDoc, { paymentStatus: newStatus });
+                                      toast.success("Payment status updated successfully!");
+                                      fetchInvoices();
+                                    }}
+                                  >
+                                    <option value="Pending">Pending</option>
+                                    <option value="Paid">Paid</option>
+                                  </select>
                                 </td>
                                 <td>{invoice.paymentMode}</td>
                                 <td>{invoice.createdAt.toLocaleDateString()}</td>
@@ -445,6 +521,13 @@ export default function InvoiceManagement() {
                                     title="Delete Invoice"
                                   >
                                     <Trash2 size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => generatePDF(invoice)}
+                                    className="btn btn-link btn-info btn-sm"
+                                    title="Print Invoice"
+                                  >
+                                    Print
                                   </button>
                                 </td>
                               </tr>

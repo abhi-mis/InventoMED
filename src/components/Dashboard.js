@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
-import { db } from '../firebase';
 import AdminHeader from "./layouts/AdminHeader";
 import AdminSideBar from "./layouts/AdminSideBar";
 import AdminFooter from "./layouts/AdminFooter";
-import { 
-  Package2, 
-  Pill, 
-  AlertCircle, 
+import { db } from '../firebase';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import {
+  Package2,
+  Pill,
+  AlertCircle,
   DollarSign,
   ShoppingCart,
   FileText,
@@ -52,8 +52,8 @@ export default function Dashboard() {
   const totalStock = medicines.reduce((acc, med) => acc + parseInt(med.stock || 0), 0);
   const totalUniqueItems = medicines.length;
   const lowStockItems = medicines.filter(med => parseInt(med.stock) < 10).length;
-  
-  const totalInventoryValue = medicines.reduce((acc, med) => 
+
+  const totalInventoryValue = medicines.reduce((acc, med) =>
     acc + (parseInt(med.stock || 0) * parseFloat(med.price || 0)), 0
   );
 
@@ -66,19 +66,25 @@ export default function Dashboard() {
     .reduce((acc, inv) => acc + (inv.total || 0), 0);
 
   const totalInvoices = invoices.length;
-  
-  // Calculate month-over-month growth
-  const currentMonth = new Date().getMonth();
-  const currentMonthSales = invoices
-    .filter(inv => new Date(inv.date).getMonth() === currentMonth)
-    .reduce((acc, inv) => acc + (inv.total || 0), 0);
-  
-  const lastMonthSales = invoices
-    .filter(inv => new Date(inv.date).getMonth() === currentMonth - 1)
-    .reduce((acc, inv) => acc + (inv.total || 0), 0);
-  
-  const monthlyGrowth = lastMonthSales ? 
-    ((currentMonthSales - lastMonthSales) / lastMonthSales * 100).toFixed(1) : 0;
+
+  // Calculate total profit
+  const totalProfit = invoices.reduce((acc, inv) => {
+    const profit = inv.medicines.reduce((profitAcc, med) => {
+      const sellingPrice = med.sellingPrice || 0;
+      const costPrice = medicines.find(m => m.id === med.medicineId)?.price || 0; // Get cost price from medicines
+      return profitAcc + ((sellingPrice - costPrice) * med.quantity);
+    }, 0);
+    return acc + profit;
+  }, 0);
+
+  // Calculate total cost price
+  const totalCostPrice = invoices.reduce((acc, inv) => {
+    const costPrice = inv.medicines.reduce((costAcc, med) => {
+      const price = medicines.find(m => m.id === med.medicineId)?.price || 0; // Get cost price from medicines
+      return costAcc + (price * med.quantity);
+    }, 0);
+    return acc + costPrice;
+  }, 0);
 
   // Get recent transactions
   const recentTransactions = invoices
@@ -99,38 +105,47 @@ export default function Dashboard() {
           <div className="container-fluid">
             <h4 className="page-title">Dashboard</h4>
 
-            {/* Main Stats - First Row */}
+            {/* STOCK and INVENTORY Section */}
             <div className="row">
-              <div className="col-md-3">
-                <div className="card card-stats card-primary">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <Package2 size={24} />
+              <div className="col-md-12">
+                <h5 className="mb-3"> STOCK and INVENTORY</h5>
+                <div className="row">
+                  <div className="col-md-3">
+                    <div className="card card-stats card-primary">
+                      <div className="card-body">
+                        <div className="numbers">
+                          <p className="card-category">Current Inventory Value</p>
+                          <h4 className="card-title">₹{totalInventoryValue.toLocaleString()}</h4>
                         </div>
                       </div>
-                      <div className="col-7 d-flex align-items-center">
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="card card-stats card-info">
+                      <div className="card-body">
                         <div className="numbers">
-                          <p className="card-category">Total Stock</p>
+                          <p className="card-category">Total Items</p>
                           <h4 className="card-title">{totalStock}</h4>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="col-md-3">
-                <div className="card card-stats card-info">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <Boxes size={24} />
+                  <div className="col-md-3">
+                    <div className="card card-stats card-danger">
+                      <div className="card-body">
+                        <div className="numbers">
+                          <p className="card-category">Low Stock Items</p>
+                          <h4 className="card-title">{lowStockItems}</h4>
                         </div>
                       </div>
-                      <div className="col-7 d-flex align-items-center">
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="card card-stats card-success">
+                      <div className="card-body">
                         <div className="numbers">
                           <p className="card-category">Unique Items</p>
                           <h4 className="card-title">{totalUniqueItems}</h4>
@@ -140,60 +155,16 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-
-              <div className="col-md-3">
-                <div className="card card-stats card-success">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <DollarSign size={24} />
-                        </div>
-                      </div>
-                      <div className="col-7 d-flex align-items-center">
-                        <div className="numbers">
-                          <p className="card-category">Inventory Value</p>
-                          <h4 className="card-title">₹{totalInventoryValue.toLocaleString()}</h4>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="col-md-3">
-                <div className="card card-stats card-danger">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <AlertCircle size={24} />
-                        </div>
-                      </div>
-                      <div className="col-7 d-flex align-items-center">
-                        <div className="numbers">
-                          <p className="card-category">Low Stock Items</p>
-                          <h4 className="card-title">{lowStockItems}</h4>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Second Row of Stats */}
+            {/* TRANSACTION ANALYTICS Section */}
             <div className="row">
-              <div className="col-md-3">
-                <div className="card card-stats card-warning">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <ShoppingCart size={24} />
-                        </div>
-                      </div>
-                      <div className="col-7 d-flex align-items-center">
+              <div className="col-md-12">
+                <h5 className="mb-3">TRANSACTION ANALYTICS</h5>
+                <div className="row">
+                  <div className="col-md-2">
+                    <div className="card card-stats card-warning">
+                      <div className="card-body">
                         <div className="numbers">
                           <p className="card-category">Total Sales</p>
                           <h4 className="card-title">₹{totalSales.toLocaleString()}</h4>
@@ -201,67 +172,62 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="col-md-3">
-                <div className="card card-stats card-success">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <DollarSign size={24} />
+                  <div className="col-md-2">
+                    <div className="card card-stats card-success">
+                      <div className="card-body">
+                        <div className="numbers">
+                          <p className="card-category">Cost Price</p>
+                          <h4 className="card-title">₹{totalCostPrice.toLocaleString()}</h4>
                         </div>
                       </div>
-                      <div className="col-7 d-flex align-items-center">
+                    </div>
+                  </div>
+
+                  <div className="col-md-2">
+                    <div className="card card-stats card-info">
+                      <div className="card-body">
                         <div className="numbers">
-                          <p className="card-category">Paid Amount</p>
+                          <p className="card-category">Net Profit</p>
+                          <h4 className="card-title">₹{(totalSales - totalCostPrice).toLocaleString()}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-2">
+                    <div className="card card-stats card-danger">
+                      <div className="card-body">
+                        <div className="numbers">
+                          <p className="card-category">Received Amount</p>
                           <h4 className="card-title">₹{paidAmount.toLocaleString()}</h4>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="col-md-3">
-                <div className="card card-stats card-danger">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <FileText size={24} />
-                        </div>
-                      </div>
-                      <div className="col-7 d-flex align-items-center">
+                  <div className="col-md-2">
+                    <div className="card card-stats card-warning">
+                      <div className="card-body">
                         <div className="numbers">
-                        <p className="card-category">Pending Payment</p>
-                        <h4 className="card-title">₹{pendingAmount.toLocaleString()}</h4>
+                          <p className="card-category">Pending Amount</p>
+                          <h4 className="card-title">₹{pendingAmount.toLocaleString()}</h4>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="col-md-3">
-                <div className="card card-stats card-info">
-                  <div className="card-body">
-                    <div className="row">
-                      <div className="col-5">
-                        <div className="icon-big text-center">
-                          <TrendingUp size={24} />
-                        </div>
-                      </div>
-                      <div className="col-7 d-flex align-items-center">
+                  <div className="col-md-2">
+                    <div className="card card-stats card-success">
+                      <div className="card-body">
                         <div className="numbers">
-                          
-                          <p className="card-category">Total Invoices</p>
+                          <p className="card-category">Total Transactions</p>
                           <h4 className="card-title">{totalInvoices}</h4>
                         </div>
                       </div>
                     </div>
                   </div>
+                
                 </div>
               </div>
             </div>
@@ -286,15 +252,14 @@ export default function Dashboard() {
                       <tbody>
                         {recentTransactions.map((invoice) => (
                           <tr key={invoice.id}>
-                            <td>{new Date(invoice.date).toLocaleDateString()}</td>
+                            <td>{new Date(invoice.createdAt).toLocaleDateString()}</td>
                             <td>{invoice.to?.name}</td>
                             <td>₹{invoice.total.toLocaleString()}</td>
                             <td>
-                              <span className={`badge ${
-                                invoice.paymentStatus === 'Paid' 
-                                  ? 'bg-success' 
+                              <span className={`badge ${invoice.paymentStatus === 'Paid'
+                                  ? 'bg-success'
                                   : 'bg-warning'
-                              }`}>
+                                }`}>
                                 {invoice.paymentStatus}
                               </span>
                             </td>
