@@ -90,10 +90,6 @@ export default function Dashboard() {
     .filter(med => parseInt(med.stock) < 10)
     .slice(0, 5);
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
-  }
-
   return (
     <>
       <AdminHeader />
@@ -239,8 +235,8 @@ export default function Dashboard() {
                       </div>
                       <div className="col-7 d-flex align-items-center">
                         <div className="numbers">
-                          <p className="card-category">Total Invoices</p>
-                          <h4 className="card-title">{totalInvoices}</h4>
+                        <p className="card-category">Pending Payment</p>
+                        <h4 className="card-title">₹{pendingAmount.toLocaleString()}</h4>
                         </div>
                       </div>
                     </div>
@@ -259,8 +255,9 @@ export default function Dashboard() {
                       </div>
                       <div className="col-7 d-flex align-items-center">
                         <div className="numbers">
-                          <p className="card-category">Monthly Growth</p>
-                          <h4 className="card-title">{monthlyGrowth}%</h4>
+                          
+                          <p className="card-category">Total Invoices</p>
+                          <h4 className="card-title">{totalInvoices}</h4>
                         </div>
                       </div>
                     </div>
