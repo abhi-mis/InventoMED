@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { auth } from "../../firebase";
-import { signOut } from "firebase/auth";
 import { Eye, Ambulance, AlignJustify, StickyNote, User, ClipboardCheck, LogOut } from "lucide-react"; // Import Lucide icons
 
 export default function AdminSideBar(props) {
@@ -17,15 +16,6 @@ export default function AdminSideBar(props) {
     return () => unsubscribe(); // Cleanup subscription on unmount
   }, []);
 
-  const handleLogout = () => {
-    signOut(auth)
-      .then(() => {
-        navigate("/login", { replace: true });
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  };
 
   return (
     <>
@@ -79,12 +69,7 @@ export default function AdminSideBar(props) {
               </Link>
             </li>
        
-            <li className="nav-item">
-              <Link onClick={handleLogout}>
-                <LogOut className="w-5 h-5" />
-                <p  className="ml-4">Logout</p>
-              </Link>
-            </li>
+  
           </ul>
         </div>
       </div>

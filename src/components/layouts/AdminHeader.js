@@ -32,7 +32,7 @@ export default function AdminHeader(props) {
       <div className="main-header">
         <div className="logo-header">
           <Link to="/" className="logo">
-            MediCare
+            MediShelf
           </Link>
           <button
             className="navbar-toggler sidenav-toggler ml-auto"
@@ -57,20 +57,13 @@ export default function AdminHeader(props) {
                   onClick={() => setShowDropDown(!showDropDown)}
                   className="dropdown-toggle profile-pic">
                   {" "}
-                  <img
-                    src={`assets/img/profile4.jpg`}
-                    alt="user-img"
-                    width="36"
-                    className="img-circle"
-                  />
+                 
                   <span>{userName !== "" ? userName : "Username"}</span>{" "}
                 </a>
                 <ul className={`dropdown-menu dropdown-user ${showDropDown ? "show" : ""}`}>
                   <li>
                     <div className="user-box">
-                      <div className="u-img">
-                        <img src={`assets/img/profile4.jpg`} alt="user" />
-                      </div>
+                     
                       <div className="u-text">
                         <h4>{userName !== "" ? userName : "Username"}</h4>
                         <p className="text-muted">{emailAddress !== "" ? emailAddress : "Email"}</p>
