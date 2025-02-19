@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 
 export default function InvoiceManagement() {
@@ -28,16 +28,18 @@ export default function InvoiceManagement() {
   const [medicines, setMedicines] = useState([{ name: "", quantity: 1, sellingPrice: 0 }]);
   const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [paymentMode, setPaymentMode] = useState("Cash");
+  const [paidAmount, setPaidAmount] = useState(0);
+  const [manualBill, setManualBill] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [availableMedicines, setAvailableMedicines] = useState([]);
+  const [selectedBill, setSelectedBill] = useState(null);
 
   const invoicesCollectionRef = collection(db, "invoices");
   const medicinesCollectionRef = collection(db, "medicine_inventory");
 
-  // Fetch available medicines from Firestore
   const fetchMedicines = async () => {
     try {
       const medicinesSnapshot = await getDocs(medicinesCollectionRef);
@@ -70,7 +72,7 @@ export default function InvoiceManagement() {
         newMedicines[index] = {
           ...newMedicines[index],
           name: selectedMed.name,
-          sellingPrice: selectedMed.sellingPrice || 0, // Use selling price
+          sellingPrice: selectedMed.sellingPrice || 0,
           medicineId: selectedMed.id
         };
       }
@@ -84,6 +86,30 @@ export default function InvoiceManagement() {
   const handleRemoveMedicine = (index) => {
     const newMedicines = medicines.filter((_, i) => i !== index);
     setMedicines(newMedicines);
+  };
+
+  const handleManualBillUpload = async (file) => {
+    if (!file) return null;
+    
+    try {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = reader.result;
+          resolve({
+            data: base64Data,
+            type: file.type,
+            name: file.name
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    } catch (error) {
+      console.error("Error processing manual bill:", error);
+      toast.error("Error processing manual bill");
+      return null;
+    }
   };
 
   const updateInventory = async (medicines) => {
@@ -113,6 +139,11 @@ export default function InvoiceManagement() {
 
     try {
       const totalAmount = medicines.reduce((total, med) => total + (med.quantity * med.sellingPrice), 0);
+      let manualBillData = null;
+
+      if (manualBill) {
+        manualBillData = await handleManualBillUpload(manualBill);
+      }
 
       const invoiceData = {
         from: {
@@ -132,8 +163,11 @@ export default function InvoiceManagement() {
           medicineId: med.medicineId || null
         })),
         total: totalAmount || 0,
+        paidAmount: Number(paidAmount) || 0,
+        remainingAmount: totalAmount - (Number(paidAmount) || 0),
         paymentStatus: paymentStatus || 'Pending',
         paymentMode: paymentMode || 'Cash',
+        manualBill: manualBillData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         sellHistory: medicines.map(med => ({
@@ -164,6 +198,8 @@ export default function InvoiceManagement() {
     setMedicines([{ name: "", quantity: 1, sellingPrice: 0 }]);
     setPaymentStatus("Pending");
     setPaymentMode("Cash");
+    setPaidAmount(0);
+    setManualBill(null);
     setShowForm(false);
     setEditingInvoice(null);
   };
@@ -195,6 +231,7 @@ export default function InvoiceManagement() {
     setMedicines(invoice.medicines || [{ name: "", quantity: 1, sellingPrice: 0 }]);
     setPaymentStatus(invoice.paymentStatus || 'Pending');
     setPaymentMode(invoice.paymentMode || 'Cash');
+    setPaidAmount(invoice.paidAmount || 0);
     setShowForm(true);
   };
 
@@ -254,7 +291,7 @@ export default function InvoiceManagement() {
     doc.text("Price", 140, tableStartY);
     
     // Draw a line under the header
-    doc.line(20, tableStartY + 2, 190, tableStartY + 2); // Horizontal line
+    doc.line(20, tableStartY + 2, 190, tableStartY + 2);
     
     let y = tableStartY + lineHeight;
     let totalAmount = 0;
@@ -264,21 +301,21 @@ export default function InvoiceManagement() {
       doc.text(med.quantity.toString(), 100, y);
       const price = med.sellingPrice;
       doc.text(`INR ${price} /Item`, 140, y);
-      totalAmount += med.quantity * price; // Calculate total amount
+      totalAmount += med.quantity * price;
       y += lineHeight;
     });
   
     // Draw a line above the total
-    doc.line(20, y, 190, y); // Horizontal line
-    y += 5; // Space before total
+    doc.line(20, y, 190, y);
+    y += 5;
     
-    // Add total amount in bold
+    // Add payment details
     doc.setFontSize(14);
-    doc.setFont("bold");
-    doc.text(`Total Amount: INR ${totalAmount}`, 20, y);
+    doc.text(`Total Amount: INR ${totalAmount}`, 20, y + 10);
+    doc.text(`Paid Amount: INR ${invoice.paidAmount || 0}`, 20, y + 20);
+    doc.text(`Remaining Amount: INR ${invoice.remainingAmount || totalAmount}`, 20, y + 30);
     
-    // Save the PDF with the name of the recipient
-    const fileName = `Invoice_${invoice.to.name.replace(/\s+/g, '-')}.pdf`; // Replace spaces with underscores
+    const fileName = `Invoice_${invoice.to.name.replace(/\s+/g, '-')}.pdf`;
     doc.save(fileName);
   };
 
@@ -301,7 +338,7 @@ export default function InvoiceManagement() {
                   </div>
                   <div className="card-body">
                     {showForm ? (
-                      <form onSubmit={handleSubmit} className="mb-4 p-4 border rounded ">
+                      <form onSubmit={handleSubmit} className="mb-4 p-4 border rounded">
                         <div className="row">
                           <div className="col-md-6">
                             <h5 className="mb-3">From</h5>
@@ -422,7 +459,7 @@ export default function InvoiceManagement() {
                         </button>
 
                         <div className="row">
-                          <div className="col-md-6">
+                          <div className="col-md-3">
                             <div className="form-group">
                               <label>Payment Status</label>
                               <select
@@ -431,11 +468,12 @@ export default function InvoiceManagement() {
                                 onChange={(e) => setPaymentStatus(e.target.value)}
                               >
                                 <option value="Pending">Pending</option>
+                                <option value="Partially Paid">Partially Paid</option>
                                 <option value="Paid">Paid</option>
                               </select>
                             </div>
                           </div>
-                          <div className="col-md-6">
+                          <div className="col-md-3">
                             <div className="form-group">
                               <label>Payment Mode</label>
                               <select
@@ -444,8 +482,43 @@ export default function InvoiceManagement() {
                                 onChange={(e) => setPaymentMode(e.target.value)}
                               >
                                 <option value="Cash">Cash</option>
-                                <option value="Online">Online </option>
+                                <option value="Online">Online</option>
+                                <option value="Card">Card</option>
                               </select>
+                            </div>
+                          </div>
+                          <div className="col-md-3">
+                            <div className="form-group">
+                              <label>Paid Amount</label>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={paidAmount}
+                                onChange={(e) => {
+                                  const amount = Number(e.target.value);
+                                  setPaidAmount(amount);
+                                  const total = medicines.reduce((sum, med) => sum + (med.quantity * med.sellingPrice), 0);
+                                  if (amount >= total) {
+                                    setPaymentStatus("Paid");
+                                  } else if (amount > 0) {
+                                    setPaymentStatus("Partially Paid");
+                                  } else {
+                                    setPaymentStatus("Pending");
+                                  }
+                                }}
+                                min="0"
+                              />
+                            </div>
+                          </div>
+                          <div className="col-md-3">
+                            <div className="form-group">
+                              <label>Upload Manual Bill</label>
+                              <input
+                                type="file"
+                                className="form-control"
+                                accept="image/*,.pdf"
+                                onChange={(e) => setManualBill(e.target.files?.[0] || null)}
+                              />
                             </div>
                           </div>
                         </div>
@@ -460,86 +533,107 @@ export default function InvoiceManagement() {
                         </div>
                       </form>
                     ) : (
-                      <table className="table table-responsive-md">
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>From</th>
-                            <th>To</th>
-                            <th>Total Amount</th>
-                            <th>Payment Status</th>
-                            <th>Payment Mode</th>
-                            <th>Date</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {isLoading ? (
+                      <div className="table-responsive">
+                        <table className="table">
+                          <thead>
                             <tr>
-                              <td colSpan="8" className="text-center">
-                                Loading invoices...
-                              </td>
+                              <th>#</th>
+                              <th>Customer</th>
+                              <th>Total Amount</th>
+                              <th>Paid Amount</th>
+                              <th>Remaining</th>
+                              <th>Status</th>
+                              <th>Payment Mode</th>
+                              <th>Date</th>
+                              <th>Actions</th>
                             </tr>
-                          ) : invoices.length === 0 ? (
-                            <tr>
-                              <td colSpan="8" className="text-center">
-                                No invoices found
-                              </td>
-                            </tr>
-                          ) : (
-                            invoices.map((invoice, index) => (
-                              <tr key={invoice.id}>
-                                <td>{index + 1}</td>
-                                <td>{invoice.from.name}</td>
-                                <td>{invoice.to.name}</td>
-                                <td>₹{invoice.total}</td>
-                                <td>
-                                  <select
-                                    className={`form-control ${invoice.paymentStatus === 'Paid' ? 'bg-success' : 'bg-warning'}`}
-                                    value={invoice.paymentStatus}
-                                    onChange={async (e) => {
-                                      const newStatus = e.target.value;
-                                      const invoiceDoc = doc(db, "invoices", invoice.id);
-                                      await updateDoc(invoiceDoc, { paymentStatus: newStatus });
-                                      toast.success("Payment status updated successfully!");
-                                      fetchInvoices();
-                                    }}
-                                  >
-                                    <option value="Pending">Pending</option>
-                                    <option value="Paid">Paid</option>
-                                  </select>
-                                </td>
-                                <td>{invoice.paymentMode}</td>
-                                <td>{invoice.created}</td>
-                                <td>{invoice.createdAt.toLocaleDateString()}</td>
-                                <td>
-                                  <button
-                                    onClick={() => handleEdit(invoice)}
-                                    className="btn btn-link btn-success btn-sm mr-2"
-                                    title="Edit Invoice"
-                                  >
-                                    <Pencil size={18} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDelete(invoice.id)}
-                                    className="btn btn-link btn-danger btn-sm"
-                                    title="Delete Invoice"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                                  <button
-                                    onClick={() => generatePDF(invoice)}
-                                    className="btn btn-link btn-info btn-sm"
-                                    title="Print Invoice"
-                                  >
-                                    Print
-                                  </button>
+                          </thead>
+                          <tbody>
+                            {isLoading ? (
+                              <tr>
+                                <td colSpan="9" className="text-center">
+                                  Loading invoices...
                                 </td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                            ) : invoices.length === 0 ? (
+                              <tr>
+                                <td colSpan="9" className="text-center">
+                                  No invoices found
+                                </td>
+                              </tr>
+                            ) : (
+                              invoices.map((invoice, index) => (
+                                <tr key={invoice.id}>
+                                  <td>{index + 1}</td>
+                                  <td>{invoice.to.name}</td>
+                                  <td>₹{invoice.total}</td>
+                                  <td>₹{invoice.paidAmount || 0}</td>
+                                  <td>₹{invoice.remainingAmount || invoice.total}</td>
+                                  <td>
+                                    <select
+                                      className={`form-control ${
+                                        invoice.paymentStatus === 'Paid'
+                                          ? 'bg-success text-white'
+                                          : invoice.paymentStatus === 'Partially Paid'
+                                          ? 'bg-warning text-white'
+                                          : 'bg-danger text-white'
+                                      }`}
+                                      value={invoice.paymentStatus}
+                                      onChange={async (e) => {
+                                        const newStatus = e.target.value;
+                                        const invoiceDoc = doc(db, "invoices", invoice.id);
+                                        await updateDoc(invoiceDoc, { paymentStatus: newStatus });
+                                        toast.success("Payment status updated successfully!");
+                                        fetchInvoices();
+                                      }}
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="Partially Paid">Partially Paid</option>
+                                      <option value="Paid">Paid</option>
+                                    </select>
+                                  </td>
+                                  <td>{invoice.paymentMode}</td>
+                                  <td>{invoice.createdAt.toLocaleDateString()}</td>
+                                  <td>
+                                    <div className="btn-group">
+                                      <button
+                                        onClick={() => handleEdit(invoice)}
+                                        className="btn btn-link btn-success btn-sm"
+                                        title="Edit Invoice"
+                                      >
+                                        <Pencil size={18} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete(invoice.id)}
+                                        className="btn btn-link btn-danger btn-sm"
+                                        title="Delete Invoice"
+                                      >
+                                        <Trash2 size={18} />
+                                      </button>
+                                      <button
+                                        onClick={() => generatePDF(invoice)}
+                                        className="btn btn-link btn-info btn-sm"
+                                        title="Print Invoice"
+                                      >
+                                        Print
+                                      </button>
+                                      {invoice.manualBill && (
+                                        <button
+                                          onClick={() => setSelectedBill(invoice.manualBill)}
+                                          className="btn btn-link btn-primary btn-sm"
+                                          title="View Bill"
+                                        >
+                                          View
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -549,6 +643,28 @@ export default function InvoiceManagement() {
         </div>
         <AdminFooter />
       </div>
+
+      {/* Bill View Modal */}
+      {selectedBill && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-11/12 h-5/6 relative">
+            <button
+              onClick={() => setSelectedBill(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              <X size={24} />
+            </button>
+            <div className="h-full p-4">
+              <iframe
+                src={selectedBill.data}
+                className="w-full h-full border-none"
+                title={selectedBill.name}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <ToastContainer />
     </>
   );
