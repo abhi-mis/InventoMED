@@ -18,7 +18,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { Pencil, Trash2, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 
-export default function InvoiceManagement() {
+function InvoiceManagement() {
   const [fromName, setFromName] = useState("");
   const [fromPhone, setFromPhone] = useState("");
   const [fromAddress, setFromAddress] = useState("");
@@ -90,7 +90,7 @@ export default function InvoiceManagement() {
 
   const handleManualBillUpload = async (file) => {
     if (!file) return null;
-    
+
     try {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -257,45 +257,45 @@ export default function InvoiceManagement() {
   const generatePDF = async (invoice) => {
     const doc = new jsPDF();
     doc.setFontSize(12);
-    
+
     // Add title
     doc.setFontSize(16);
     doc.text(`Invoice_${invoice.to.name.replace(/\s+/g, ' ')}`, 20, 20);
     doc.setFontSize(12);
-    
+
     // Add From section on the left
     doc.text("From:", 20, 30);
     doc.text(`Name: ${invoice.from.name}`, 20, 40);
     doc.text(`Phone: ${invoice.from.phone}`, 20, 50);
     doc.text(`Address: ${invoice.from.address}`, 20, 60);
-    
+
     // Add To section on the right
     doc.text("To:", 140, 30);
     doc.text(`Name: ${invoice.to.name}`, 140, 40);
     doc.text(`Phone: ${invoice.to.phone}`, 140, 50);
     doc.text(`Address: ${invoice.to.address}`, 140, 60);
-    
+
     // Add Date and Payment details
     doc.text(`Date: ${invoice.createdAt.toLocaleDateString()}`, 20, 80);
     doc.text(`Payment Mode: ${invoice.paymentMode}`, 140, 80);
     doc.text(`Payment Status: ${invoice.paymentStatus}`, 140, 90);
-    
+
     // Add Medicines table header
     const startY = 110;
     const lineHeight = 10;
     const tableStartY = startY + lineHeight;
- 
+
     doc.text("Medicines:", 20, startY);
     doc.text("Name", 20, tableStartY);
     doc.text("Quantity", 100, tableStartY);
     doc.text("Price", 140, tableStartY);
-    
+
     // Draw a line under the header
     doc.line(20, tableStartY + 2, 190, tableStartY + 2);
-    
+
     let y = tableStartY + lineHeight;
     let totalAmount = 0;
-  
+
     invoice.medicines.forEach(med => {
       doc.text(med.name, 20, y);
       doc.text(med.quantity.toString(), 100, y);
@@ -304,17 +304,17 @@ export default function InvoiceManagement() {
       totalAmount += med.quantity * price;
       y += lineHeight;
     });
-  
+
     // Draw a line above the total
     doc.line(20, y, 190, y);
     y += 5;
-    
+
     // Add payment details
     doc.setFontSize(14);
     doc.text(`Total Amount: INR ${totalAmount}`, 20, y + 10);
     doc.text(`Paid Amount: INR ${invoice.paidAmount || 0}`, 20, y + 20);
     doc.text(`Remaining Amount: INR ${invoice.remainingAmount || totalAmount}`, 20, y + 30);
-    
+
     const fileName = `Invoice_${invoice.to.name.replace(/\s+/g, '-')}.pdf`;
     doc.save(fileName);
   };
@@ -571,13 +571,12 @@ export default function InvoiceManagement() {
                                   <td>₹{invoice.remainingAmount || invoice.total}</td>
                                   <td>
                                     <select
-                                      className={`form-control ${
-                                        invoice.paymentStatus === 'Paid'
+                                      className={`form-control ${invoice.paymentStatus === 'Paid'
                                           ? 'bg-success text-white'
                                           : invoice.paymentStatus === 'Partially Paid'
-                                          ? 'bg-warning text-white'
-                                          : 'bg-danger text-white'
-                                      }`}
+                                            ? 'bg-warning text-white'
+                                            : 'bg-danger text-white'
+                                        }`}
                                       value={invoice.paymentStatus}
                                       onChange={async (e) => {
                                         const newStatus = e.target.value;
@@ -646,22 +645,39 @@ export default function InvoiceManagement() {
 
       {/* Bill View Modal */}
       {selectedBill && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-11/12 h-5/6 relative">
-            <button
-              onClick={() => setSelectedBill(null)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              <X size={24} />
-            </button>
-            <div className="h-full p-4">
-              <iframe
-                src={selectedBill.data}
-                className="w-full h-full border-none"
-                title={selectedBill.name}
-              />
+        <div className="modal fade show" style={{ display: 'block' }} role="dialog" onClick={() => setSelectedBill(null)}>
+          <div className="modal-dialog modal-lg" role="document" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Manual Bill View</h5>
+                <button
+                  type="button"
+                  className="close"
+                  onClick={() => setSelectedBill(null)}
+                  aria-label="Close"
+                >
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+              <div className="modal-body" style={{ height: '70vh' }}>
+                <iframe
+                  src={selectedBill.data}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  title="Manual Bill"
+                />
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedBill(null)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
+          <div className="modal-backdrop fade show" onClick={() => setSelectedBill(null)}></div>
         </div>
       )}
 
@@ -669,3 +685,5 @@ export default function InvoiceManagement() {
     </>
   );
 }
+
+export default InvoiceManagement;
